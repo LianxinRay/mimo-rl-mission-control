@@ -85,11 +85,22 @@ main{display:grid;grid-template-columns:296px 1fr 348px;height:calc(100vh - 82px
 .bench .bl{display:flex;align-items:baseline;gap:8px}
 .bench span{font-size:9px;color:var(--dim);letter-spacing:.12em}
 .bench b{font-size:15px;color:var(--amber)}
-.wl-row{display:flex;align-items:center;gap:8px;padding:7px 12px;border-bottom:1px solid var(--line);font-size:11px}
+.wl-row{display:flex;align-items:center;gap:9px;padding:8px 12px;border-bottom:1px solid var(--line)}
 .wl-row:last-child{border-bottom:none}
-.wl-row .nm{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--txt)}
-.wl-row .vl{font-weight:500}
-.wl-row .dl{font-size:9px;width:64px;text-align:right}
+.wl-dot{flex:0 0 auto;width:8px;height:8px;border-radius:50%}
+.wl-dot.ok{background:var(--mint);box-shadow:0 0 6px var(--mint)}
+.wl-dot.warn{background:var(--amber);box-shadow:0 0 6px var(--amber)}
+.wl-dot.crit{background:var(--red);box-shadow:0 0 6px var(--red)}
+.wl-dot.na{background:var(--faint)}
+.wl-main{flex:1;min-width:0}
+.wl-zh{font-family:var(--sans);font-size:12px;color:var(--txt);line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.wl-en{font-size:9px;color:var(--dim);letter-spacing:.04em}
+.wl-tag{font-size:8.5px;color:var(--faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px}
+.wl-vals{flex:0 0 auto;text-align:right;line-height:1.5}
+.wl-vals div{white-space:nowrap}
+.wl-vals i{font-style:normal;font-size:9px;color:var(--faint);margin-right:4px}
+.wl-vals b{font-size:11px;font-weight:500}
+.wl-vals .dl{font-size:9px;margin-left:5px}
 .up{color:var(--mint)} .dn{color:var(--red)} .fw{color:var(--dim)}
 .brief{background:linear-gradient(180deg,var(--panel2),var(--panel));border:1px solid var(--line)}
 .brief-h{display:flex;align-items:center;gap:10px;padding:12px 14px;cursor:pointer;user-select:none}
@@ -316,11 +327,15 @@ const RUNS = ['pro','flash'];
 const RUN_LABEL = k => D.runs[k] ? D.runs[k].name : k;
 
 function metric(name){ return D.metrics.find(m=>m[0]===name); }
-/* 行格式: [tag, proVal, proDelta, flashVal, flashDelta, proSeries, flashSeries] */
-function mRaw(name, run, i){ const m=metric(name); if(!m) return null; const v=m[run==='pro'?i:i+2]; return (typeof v==='number' && isFinite(v)) ? v : null; }
+/* 行格式: [tag, proVal, proDelta, proSeries, flashVal, flashDelta, flashSeries] */
+function mRaw(name, run, i){ const m=metric(name); if(!m) return null;
+  const v = run==='pro' ? m[i] : m[i+3];
+  return (typeof v==='number' && isFinite(v)) ? v : null; }
 function mVal(name, run){ return mRaw(name, run, 1); }
 function mDelta(name, run){ return mRaw(name, run, 2); }
-function mSeries(name, run){ const m=metric(name); const v=m ? m[run==='pro'?5:6] : null; return Array.isArray(v) ? v : null; }
+function mSeries(name, run){ const m=metric(name); if(!m) return null;
+  const v = run==='pro' ? m[3] : m[6];
+  return Array.isArray(v) ? v : null; }
 
 function fmt(v, digits){
   if(typeof v!=='number' || !isFinite(v)) return '—';
@@ -473,11 +488,42 @@ function benchHist(run){
 })();
 
 /* watchlist */
-const WATCH=['train_infer_diff/new_infer/kl','dynsam/infra_error/seq_rate','critic/rewards/mean','dynsam/avg@n','timing_s/step'];
+/* Watchlist 定义：tag / 中文名 / 单位格式 / 阈值(基于较差的一run取值) */
+const WATCH=[
+  {tag:'train_infer_diff/new_infer/kl', zh:'KL 散度', en:'train/infer 行为差异', u:'f4',
+   ok:v=>v<0.008, warn:v=>v<0.015},
+  {tag:'dynsam/infra_error/seq_rate', zh:'Infra 错误率', en:'基础设施序列错误占比', u:'pct',
+   ok:v=>v<0.005, warn:v=>v<0.01},
+  {tag:'critic/rewards/mean', zh:'Critic 校准', en:'价值网络 reward 均值', u:'f3',
+   ok:()=>true, warn:()=>false},
+  {tag:'dynsam/avg@n', zh:'动态采样均分', en:'综合训练信号强度', u:'f3',
+   ok:()=>true, warn:()=>false},
+  {tag:'timing_s/step', zh:'单步耗时', en:'含 rollout 与 trainer', u:'dur',
+   ok:v=>v<9000, warn:v=>v<12600},
+];
+function fmtU(v, u){
+  if(typeof v!=='number') return '—';
+  if(u==='pct') return (v*100).toFixed(2)+'%';
+  if(u==='dur'){ const m=Math.round(v/60); return m>=90?`${(v/3600).toFixed(1)}h`:`${m}m`; }
+  if(u==='f3') return v.toFixed(3);
+  if(u==='f4') return v.toFixed(4);
+  return fmt(v);
+}
 (function(){
-  $('watchlist').innerHTML = WATCH.map(n=>`<div class="wl-row"><span class="nm">${n}</span>
-    <span class="vl">P ${fmt(mVal(n,'pro'))}</span>${fmtDelta(mDelta(n,'pro'))}
-    <span class="vl">F ${fmt(mVal(n,'flash'))}</span>${fmtDelta(mDelta(n,'flash'))}</div>`).join('');
+  $('watchlist').innerHTML = WATCH.map(w=>{
+    const pv=mVal(w.tag,'pro'), fv=mVal(w.tag,'flash');
+    const pd=mDelta(w.tag,'pro'), fd=mDelta(w.tag,'flash');
+    const worst=[pv,fv].filter(x=>typeof x==='number').sort((a,b)=>b-a)[0];
+    const stCls = worst===undefined ? 'na' : (w.warn&&w.warn(worst)) ? 'warn' : (w.ok&&w.ok(worst)) ? 'ok' : 'warn';
+    return `<div class="wl-row">
+      <span class="wl-dot ${stCls}"></span>
+      <div class="wl-main"><div class="wl-zh">${w.zh} <span class="wl-en">${w.en}</span></div>
+        <div class="wl-tag">${w.tag}</div></div>
+      <div class="wl-vals">
+        <div><i>P</i><b>${fmtU(pv,w.u)}</b>${fmtDelta(pd)}</div>
+        <div><i>F</i><b>${fmtU(fv,w.u)}</b>${fmtDelta(fd)}</div>
+      </div></div>`;
+  }).join('');
 })();
 
 /* brief */
