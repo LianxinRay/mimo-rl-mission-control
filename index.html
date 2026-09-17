@@ -152,6 +152,26 @@ tr.detail-row td{padding:0;border-bottom:1px solid var(--line)}
 .alert .a-t time{margin-left:auto;font-size:9px;color:var(--dim)}
 .alert p{font-family:var(--sans);font-size:11.5px;line-height:1.65;color:#9fb0d3}
 .alert p b{color:var(--txt)}
+/* brief v2 */
+.verdict{font-family:var(--sans);font-size:13px;line-height:1.7;color:var(--txt);padding:0 14px 10px}
+.verdict b{color:var(--cyan)}
+.brief-cols{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:0 14px}
+.bcol{border:1px solid var(--line);background:rgba(5,8,16,.35);padding:9px 12px 10px}
+.bcol-ok{border-top:2px solid var(--mint)}
+.bcol-warn{border-top:2px solid var(--amber)}
+.bcol h3{font-size:10px;letter-spacing:.18em;margin-bottom:7px}
+.bcol-ok h3{color:var(--mint)} .bcol-warn h3{color:var(--amber)}
+.bcol ul{list-style:none}
+.bcol li{font-family:var(--sans);font-size:11.5px;line-height:1.65;color:#b9c6e2;
+  padding:4px 0 4px 14px;position:relative;border-bottom:1px dashed rgba(26,37,64,.6)}
+.bcol li:last-child{border-bottom:none}
+.bcol li::before{position:absolute;left:0;top:4px;font-family:var(--mono);font-size:10px}
+.bcol-ok li::before{content:'▲';color:var(--mint)}
+.bcol-warn li::before{content:'!';color:var(--amber);font-weight:700}
+.bcol li b{color:var(--txt)}
+.brief-meta{font-family:var(--mono);font-size:9.5px;color:var(--faint);letter-spacing:.06em;
+  padding:9px 14px 2px;border-top:1px solid var(--line);margin-top:10px}
+@media(max-width:900px){.brief-cols{grid-template-columns:1fr}}
 .feed{display:flex;flex-direction:column;gap:8px}
 .msg{border:1px solid var(--line);background:var(--panel);border-radius:0 6px 6px 0;padding:10px 12px;
   border-left:3px solid var(--cyan);animation:fadeup .4s ease both}
@@ -218,7 +238,14 @@ tr.detail-row td{padding:0;border-bottom:1px solid var(--line)}
         <span class="pill" id="brief-pill">--</span>
         <svg class="chev" width="12" height="12" viewBox="0 0 12 12"><path d="M2 4l4 4 4-4" stroke="currentColor" fill="none" stroke-width="1.5"/></svg>
       </div>
-      <div class="brief-b"><p id="brief-text"></p></div>
+      <div class="brief-b">
+        <p class="verdict" id="brief-verdict"></p>
+        <div class="brief-cols">
+          <div class="bcol bcol-ok"><h3>已达成</h3><ul id="brief-gains"></ul></div>
+          <div class="bcol bcol-warn"><h3>需关注 · 与近窗对比</h3><ul id="brief-risks"></ul></div>
+        </div>
+        <div class="brief-meta" id="brief-meta"></div>
+      </div>
     </div>
 
     <div class="card">
@@ -290,12 +317,13 @@ const RUN_LABEL = k => D.runs[k] ? D.runs[k].name : k;
 
 function metric(name){ return D.metrics.find(m=>m[0]===name); }
 /* 行格式: [tag, proVal, proDelta, flashVal, flashDelta, proSeries, flashSeries] */
-function mVal(name, run){ const m=metric(name); return m ? m[run==='pro'?1:3] : null; }
-function mDelta(name, run){ const m=metric(name); return m ? m[run==='pro'?2:4] : null; }
-function mSeries(name, run){ const m=metric(name); return m ? m[run==='pro'?5:6] : null; }
+function mRaw(name, run, i){ const m=metric(name); if(!m) return null; const v=m[run==='pro'?i:i+2]; return (typeof v==='number' && isFinite(v)) ? v : null; }
+function mVal(name, run){ return mRaw(name, run, 1); }
+function mDelta(name, run){ return mRaw(name, run, 2); }
+function mSeries(name, run){ const m=metric(name); const v=m ? m[run==='pro'?5:6] : null; return Array.isArray(v) ? v : null; }
 
 function fmt(v, digits){
-  if(v===null||v===undefined) return '—';
+  if(typeof v!=='number' || !isFinite(v)) return '—';
   if(Math.abs(v)>=1e9) return (v/1e9).toFixed(2)+'B';
   if(Math.abs(v)>=1e6) return (v/1e6).toFixed(1)+'M';
   if(Math.abs(v)>=1e3 && digits===undefined) return (v/1e3).toFixed(1)+'k';
@@ -303,7 +331,7 @@ function fmt(v, digits){
   return String(v);
 }
 function fmtDelta(d){
-  if(d===null||d===undefined) return '<span class="dl fw">—</span>';
+  if(typeof d!=='number' || !isFinite(d)) return '<span class="dl fw">—</span>';
   const cls = d>0 ? 'up' : d<0 ? 'dn' : 'fw';
   const sign = d>0 ? '▲+' : d<0 ? '▼' : '±';
   return `<span class="dl ${cls}">${sign}${Math.abs(d)}</span>`;
@@ -454,17 +482,54 @@ const WATCH=['train_infer_diff/new_infer/kl','dynsam/infra_error/seq_rate','crit
 
 /* brief */
 (function(){
-  const hitsPreview = RULES.filter(r=>r.test());
-  const nCrit = hitsPreview.filter(r=>r.sev==='crit'||r.sev==='warn').length;
-  $('brief-pill').className = 'pill ' + (nCrit>2?'warn':'ok');
-  $('brief-pill').textContent = nCrit ? `${nCrit} 项需关注` : '全部正常';
-  const klF=mVal('train_infer_diff/new_infer/kl','flash'), klP=mVal('train_infer_diff/new_infer/kl','pro');
+  const hits = RULES.filter(r=>r.test());
+  const risks = hits.filter(r=>r.sev==='crit'||r.sev==='warn');
+  $('brief-pill').className = 'pill ' + (risks.length?'warn':'ok');
+  $('brief-pill').textContent = risks.length ? `${risks.length} 项需关注` : '全部正常';
+
+  /* 结论一句话 */
+  const worst = risks[0];
+  $('brief-verdict').innerHTML = worst
+    ? `整体推进正常，但存在 <b>${risks.length} 项</b>需关注：${worst.title}等，详见右栏 ALERTS 与下方「需关注」。`
+    : `两条 run 推进正常，所有监控规则通过，训练处于健康区间。`;
+
+  /* 已达成 */
+  const gains = [];
+  const b = (D.benchmarks||[])[0];
+  if(b && b.history){
+    const line = RUNS.map(k=>{
+      const h=b.history[k]; if(!h||!h.vals.length) return null;
+      const first=h.vals[0], last=h.vals[h.vals.length-1];
+      return `${k} <b>${last}</b>（step ${h.steps[h.steps.length-1]}，较 step ${h.steps[0]} ${last>=first?'+':''}${(last-first).toFixed(1)}）`;
+    }).filter(Boolean).join(' / ');
+    if(line) gains.push(`${b.title}：${line}`);
+  }
   const pr1=mVal('dynsam/passrate/one','pro'), pr1d=mDelta('dynsam/passrate/one','pro');
-  const upF=risingSources('flash',0.10);
-  $('brief-text').innerHTML =
-    `数据更新于 <b>${D.generated_at}</b>。两条 run 均在推进：pro 位于 step <b>${D.runs.pro.step}</b>，flash 位于 step <b>${D.runs.flash.step}</b>。`
-    + `当前规则引擎命中 <b>${hitsPreview.length}</b> 条（详见右侧 ALERTS）。关键读数：flash KL <b>${fmt(klF)}</b>、pro KL <b>${fmt(klP)}</b>；pro pass@1 <b>${fmt(pr1,3)}</b>（${mDelta('dynsam/passrate/one','pro')>0?'+':''}${fmt(mDelta('dynsam/passrate/one','pro'),3)}）；`
-    + `flash 侧 ${upF.length} 个数据源 reward 趋势 >+10%。采样与逐源明细见下方各面板，历史分析结论见时间线。`;
+  if(pr1!=null) gains.push(`pro pass@1 <b>${fmt(pr1,3)}</b>${pr1d?`（近窗 ${pr1d>0?'+':''}${pr1d}）`:''}`);
+  const upF=risingSources('flash',0.10), upP=risingSources('pro',0.10);
+  if(upF.length) gains.push(`flash <b>${upF.length} 个源</b> reward 趋势 >+10%：${upF.slice(0,3).map(x=>x[0].split('/')[1]).join('、')}${upF.length>3?'…':''}`);
+  if(upP.length) gains.push(`pro <b>${upP.length} 个源</b> reward 趋势 >+10%：${upP.slice(0,3).map(x=>x[0].split('/')[1]).join('、')}${upP.length>3?'…':''}`);
+  const pgd=mDelta('actor/pg_loss','pro');
+  if(pgd!=null && pgd<0) gains.push(`pro pg_loss 近窗 <b>${pgd}</b>，策略更新收敛平稳`);
+  $('brief-gains').innerHTML = gains.map(g=>`<li>${g}</li>`).join('') || '<li>—</li>';
+
+  /* 需关注（带近窗对比） */
+  const riskItems = risks.slice(0,5).map(r=>{
+    let t = r.text();
+    // 截断过长的规则文本，保留首句结论
+    const sents = t.split(/(?<=。)/);
+    if(sents.length>2 || t.length>160) t = sents[0];
+    return `<li><b>${r.title}</b> — ${t}</li>`;
+  });
+  const klF=mVal('train_infer_diff/new_infer/kl','flash'), klFd=mDelta('train_infer_diff/new_infer/kl','flash');
+  if(klF!=null && !risks.some(r=>r.id==='kl-flash'))
+    riskItems.push(`<li>KL 读数：flash <b>${klF}</b>（近窗 ${klFd>0?'+':''}${klFd}）/ pro <b>${mVal('train_infer_diff/new_infer/kl','pro')}</b>，未触警戒线</li>`);
+  $('brief-risks').innerHTML = riskItems.join('') || '<li>无</li>';
+
+  /* 附注 */
+  $('brief-meta').textContent =
+    `数据更新 ${D.generated_at} (UTC+8) · pro step ${D.runs.pro.step} / flash step ${D.runs.flash.step}`
+    + ` · 近窗 = 最近3步均值 vs 前3步均值 · 明细见下方各面板，历史结论见时间线`;
 })();
 
 /* composition */
