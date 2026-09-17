@@ -88,7 +88,7 @@ def mean(xs):
 
 
 def main():
-    data = {"generated_at": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+    data = {"generated_at": datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=8))).strftime("%Y-%m-%d %H:%M:%S"),
             "source": "mimo.xiaomi.com/rl", "runs": {}, "metrics": [], "comp": [],
             "benchmarks": [], "notices": [], "timeline": TIMELINE}
 
