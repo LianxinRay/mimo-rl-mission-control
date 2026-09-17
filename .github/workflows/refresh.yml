@@ -1,0 +1,34 @@
+name: refresh-data
+
+on:
+  schedule:
+    - cron: '*/30 * * * *'   # 每 30 分钟
+  workflow_dispatch:         # 支持手动触发
+
+permissions:
+  contents: write
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Fetch MiMo RL data
+        run: python fetch_data.py
+
+      - name: Commit & push if changed
+        run: |
+          git config user.name  "mimo-rl-bot"
+          git config user.email "mimo-rl-bot@users.noreply.github.com"
+          git add data.js
+          if git diff --cached --quiet; then
+            echo "no data change"
+          else
+            git commit -m "data: refresh $(date -u '+%Y-%m-%d %H:%M UTC')"
+            git push
+          fi

@@ -1,0 +1,595 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MiMo RL · Mission Control</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#050810; --panel:#0c1220; --panel2:#111a2b; --line:#1a2540;
+  --txt:#dbe4f5; --dim:#5f7099; --faint:#3a4a6e;
+  --cyan:#22d3ee; --mint:#34d399; --amber:#fbbf24; --red:#f87171; --magenta:#e879f9;
+  --mono:'JetBrains Mono',ui-monospace,Consolas,monospace;
+  --sans:'Inter',-apple-system,'PingFang SC','Microsoft YaHei',sans-serif;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{height:100%}
+body{background:var(--bg);color:var(--txt);font-family:var(--mono);font-size:12px;overflow:hidden}
+body::after{content:'';position:fixed;inset:0;pointer-events:none;z-index:99;
+  background:repeating-linear-gradient(0deg,rgba(255,255,255,.014) 0 1px,transparent 1px 3px)}
+::-webkit-scrollbar{width:6px;height:6px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--line);border-radius:3px}
+::-webkit-scrollbar-thumb:hover{background:var(--faint)}
+header{height:52px;display:flex;align-items:center;gap:16px;padding:0 16px;
+  border-bottom:1px solid var(--line);background:rgba(5,8,16,.9);position:relative;z-index:10}
+.logo{display:flex;align-items:center;gap:10px}
+.logo svg{animation:sweep 4.2s linear infinite}
+@keyframes sweep{to{transform:rotate(360deg)}}
+.logo b{font-size:13px;letter-spacing:.18em}
+.logo span{color:var(--dim);font-size:10px;letter-spacing:.14em}
+.live{display:flex;align-items:center;gap:7px;border:1px solid var(--line);padding:4px 10px;border-radius:3px;background:var(--panel)}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--mint);box-shadow:0 0 8px var(--mint);animation:pulse 1.5s ease-in-out infinite}
+.dot.amber{background:var(--amber);box-shadow:0 0 8px var(--amber)}
+@keyframes pulse{50%{opacity:.35}}
+.hspace{flex:1}
+.clock{text-align:right;line-height:1.35}
+.clock b{font-size:13px;color:var(--cyan)}
+.clock span{display:block;font-size:9px;color:var(--dim);letter-spacing:.12em}
+.runlights{display:flex;gap:14px}
+.runlight{display:flex;align-items:center;gap:7px;font-size:10px;letter-spacing:.1em;color:var(--dim)}
+.runlight b{color:var(--txt);font-weight:500}
+.ticker{border-bottom:1px solid var(--line);background:var(--panel);overflow:hidden;height:30px;display:flex;align-items:center}
+.ticker .tag{flex:0 0 auto;padding:0 12px;height:100%;display:flex;align-items:center;background:var(--panel2);
+  border-right:1px solid var(--line);color:var(--amber);font-size:10px;letter-spacing:.16em}
+.ticker-track{display:flex;gap:48px;white-space:nowrap;animation:tick 60s linear infinite;padding-left:16px}
+.ticker:hover .ticker-track{animation-play-state:paused}
+@keyframes tick{to{transform:translateX(-50%)}}
+.ticker-track span{color:var(--dim)}
+.ticker-track b{color:var(--txt);font-weight:500}
+main{display:grid;grid-template-columns:296px 1fr 348px;height:calc(100vh - 82px)}
+.col{overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.col.left{border-right:1px solid var(--line)}
+.col.right{border-left:1px solid var(--line)}
+.card{background:var(--panel);border:1px solid var(--line)}
+.card-h{display:flex;align-items:center;gap:8px;padding:9px 12px;border-bottom:1px solid var(--line)}
+.card-h h2{font-size:10px;font-weight:700;letter-spacing:.2em;color:var(--dim)}
+.card-h .pill{margin-left:auto}
+.card-b{padding:12px}
+.pill{display:inline-flex;align-items:center;gap:5px;font-size:9px;letter-spacing:.1em;
+  padding:2px 8px;border-radius:2px;border:1px solid}
+.pill::before{content:'';width:5px;height:5px;border-radius:50%;background:currentColor;animation:pulse 1.5s ease-in-out infinite}
+.pill.ok{color:var(--mint);border-color:rgba(52,211,153,.35);background:rgba(52,211,153,.07)}
+.pill.warn{color:var(--amber);border-color:rgba(251,191,36,.35);background:rgba(251,191,36,.07)}
+.pill.crit{color:var(--red);border-color:rgba(248,113,113,.4);background:rgba(248,113,113,.08)}
+.pill.info{color:var(--cyan);border-color:rgba(34,211,238,.35);background:rgba(34,211,238,.07)}
+.pill.na{color:var(--dim);border-color:var(--line);background:transparent}
+.pill.na::before{animation:none}
+.run-card{background:var(--panel);border:1px solid var(--line);position:relative;overflow:hidden}
+.run-card::before{content:'';position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--cyan)}
+.run-card.warn-edge::before{background:var(--amber)}
+.run-card .rc-h{display:flex;align-items:center;gap:8px;padding:10px 12px 8px}
+.run-card .rc-h b{font-size:13px;letter-spacing:.06em}
+.run-card .step{margin-left:auto;text-align:right}
+.run-card .step b{font-size:16px;color:var(--cyan)}
+.run-card .step span{display:block;font-size:9px;color:var(--dim);letter-spacing:.1em}
+.kv{display:grid;grid-template-columns:1fr 1fr;border-top:1px solid var(--line)}
+.kv div{padding:7px 12px;border-bottom:1px solid var(--line)}
+.kv div:nth-child(odd){border-right:1px solid var(--line)}
+.kv label{display:block;font-size:9px;color:var(--dim);letter-spacing:.12em;margin-bottom:2px}
+.kv b{font-size:13px;font-weight:500}
+.kv .up{color:var(--mint)}
+.bench{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 12px;background:var(--panel2);border-top:1px solid var(--line)}
+.bench .bl{display:flex;align-items:baseline;gap:8px}
+.bench span{font-size:9px;color:var(--dim);letter-spacing:.12em}
+.bench b{font-size:15px;color:var(--amber)}
+.wl-row{display:flex;align-items:center;gap:8px;padding:7px 12px;border-bottom:1px solid var(--line);font-size:11px}
+.wl-row:last-child{border-bottom:none}
+.wl-row .nm{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--txt)}
+.wl-row .vl{font-weight:500}
+.wl-row .dl{font-size:9px;width:64px;text-align:right}
+.up{color:var(--mint)} .dn{color:var(--red)} .fw{color:var(--dim)}
+.brief{background:linear-gradient(180deg,var(--panel2),var(--panel));border:1px solid var(--line)}
+.brief-h{display:flex;align-items:center;gap:10px;padding:12px 14px;cursor:pointer;user-select:none}
+.brief-h h2{font-size:11px;letter-spacing:.22em;color:var(--amber)}
+.brief-h .chev{margin-left:auto;transition:transform .42s cubic-bezier(.4,0,.2,1);color:var(--dim)}
+.brief.closed .chev{transform:rotate(-90deg)}
+.brief-b{max-height:460px;overflow:hidden;transition:max-height .42s cubic-bezier(.4,0,.2,1),opacity .3s}
+.brief.closed .brief-b{max-height:0;opacity:0}
+.brief-b p{font-family:var(--sans);font-size:12.5px;line-height:1.75;color:#b9c6e2;padding:0 14px 12px}
+.brief-b p b{color:var(--txt)}
+.comp{display:flex;height:26px;border:1px solid var(--line);margin-bottom:8px}
+.comp div{display:flex;align-items:center;justify-content:center;font-size:9px;letter-spacing:.08em;
+  color:#050810;font-weight:700;min-width:0;overflow:hidden}
+.comp-legend{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:10px;color:var(--dim)}
+.comp-legend i{display:inline-block;width:8px;height:8px;margin-right:5px;vertical-align:-1px}
+.seg{display:flex;border:1px solid var(--line);margin-bottom:10px}
+.seg button{flex:1;background:transparent;border:none;color:var(--dim);font-family:var(--mono);
+  font-size:10px;letter-spacing:.14em;padding:6px 0;cursor:pointer;border-right:1px solid var(--line)}
+.seg button:last-child{border-right:none}
+.seg button.on{background:var(--panel2);color:var(--cyan)}
+table{width:100%;border-collapse:collapse;font-size:11px}
+th{font-size:9px;letter-spacing:.14em;color:var(--dim);text-align:left;padding:6px 8px;border-bottom:1px solid var(--line);font-weight:500}
+td{padding:5px 8px;border-bottom:1px solid rgba(26,37,64,.5)}
+tbody tr:hover{background:rgba(34,211,238,.03)}
+td.r,th.r{text-align:right}
+.cat-code{color:var(--cyan)} .cat-general{color:var(--mint)} .cat-cyber{color:var(--magenta)}
+.cat-visual{color:var(--amber)} .cat-chat{color:var(--dim)}
+.ov{color:var(--amber);font-weight:500}
+.starve{color:var(--red);font-weight:500}
+.fil{display:flex;gap:0;border:1px solid var(--line);margin-bottom:10px;flex-wrap:wrap}
+.fil button{flex:1;min-width:60px;background:transparent;border:none;border-right:1px solid var(--line);
+  color:var(--dim);font-family:var(--mono);font-size:10px;letter-spacing:.12em;padding:6px 0;cursor:pointer}
+.fil button:last-child{border-right:none}
+.fil button.on{background:var(--panel2);color:var(--cyan)}
+tr.src-row{cursor:pointer}
+tr.src-row.open td{background:rgba(34,211,238,.05)}
+tr.detail-row td{padding:0;border-bottom:1px solid var(--line)}
+.detail-wrap{padding:12px;background:var(--panel2)}
+.detail-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+.dcell{background:var(--panel);border:1px solid var(--line);padding:8px 10px}
+.dcell label{display:block;font-size:8px;letter-spacing:.14em;color:var(--dim);margin-bottom:4px}
+.dcell b{font-size:12px;font-weight:500}
+.spark{display:block;margin-top:2px}
+.spark .ln{stroke:var(--cyan);stroke-width:1.4;fill:none}
+.spark .area{fill:rgba(34,211,238,.12)}
+.spark.up .ln{stroke:var(--mint)} .spark.up .area{fill:rgba(52,211,153,.12)}
+.spark.dn .ln{stroke:var(--red)} .spark.dn .area{fill:rgba(248,113,113,.12)}
+.spark .last{fill:var(--txt)}
+.mgrid{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--line);border:1px solid var(--line)}
+.mcell{background:var(--panel);padding:10px 12px}
+.mcell .t{display:flex;align-items:center;gap:6px;font-size:9px;letter-spacing:.1em;color:var(--dim);margin-bottom:6px}
+.mcell .v{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+.mcell .v b{font-size:15px;font-weight:500}
+.mcell .v span{font-size:10px}
+.alert{border:1px solid var(--line);border-left:3px solid var(--dim);background:var(--panel);padding:10px 12px;margin-bottom:8px}
+.alert.crit{border-left-color:var(--red)} .alert.warn{border-left-color:var(--amber)}
+.alert.info{border-left-color:var(--cyan)} .alert.ok{border-left-color:var(--mint)}
+.alert .a-t{display:flex;align-items:center;gap:8px;margin-bottom:4px}
+.alert .a-t b{font-size:11px;font-weight:700;letter-spacing:.04em}
+.alert .a-t time{margin-left:auto;font-size:9px;color:var(--dim)}
+.alert p{font-family:var(--sans);font-size:11.5px;line-height:1.65;color:#9fb0d3}
+.alert p b{color:var(--txt)}
+.feed{display:flex;flex-direction:column;gap:8px}
+.msg{border:1px solid var(--line);background:var(--panel);border-radius:0 6px 6px 0;padding:10px 12px;
+  border-left:3px solid var(--cyan);animation:fadeup .4s ease both}
+.msg p{font-family:var(--sans);font-size:11.5px;line-height:1.7;color:#b9c6e2}
+.msg p b{color:var(--txt)}
+.msg .tag{display:inline-block;font-size:8px;letter-spacing:.16em;color:var(--cyan);margin-bottom:5px}
+.msg.warn{border-left-color:var(--amber)} .msg.warn .tag{color:var(--amber)}
+.msg.ok{border-left-color:var(--mint)} .msg.ok .tag{color:var(--mint)}
+@keyframes fadeup{from{opacity:0;transform:translateY(6px)}}
+/* timeline */
+.tl{position:relative;padding-left:16px}
+.tl::before{content:'';position:absolute;left:4px;top:6px;bottom:6px;width:1px;background:var(--line)}
+.tl-item{position:relative;padding:0 0 14px}
+.tl-item::before{content:'';position:absolute;left:-16px;top:4px;width:7px;height:7px;border-radius:50%;
+  background:var(--panel);border:2px solid var(--cyan)}
+.tl-item.warn::before{border-color:var(--amber)}
+.tl-item .tl-t{font-size:10px;color:var(--cyan);letter-spacing:.08em}
+.tl-item.warn .tl-t{color:var(--amber)}
+.tl-item b{display:block;font-family:var(--sans);font-size:12.5px;margin:2px 0 4px}
+.tl-item ul{list-style:none;font-family:var(--sans);font-size:11.5px;color:#9fb0d3;line-height:1.7}
+.tl-item li::before{content:'· ';color:var(--faint)}
+.src-note{font-size:9px;color:var(--faint);letter-spacing:.08em;padding:2px 0 0}
+@media(max-width:1100px){main{grid-template-columns:1fr} .col{border:none}}
+@media(max-width:900px){.detail-grid{grid-template-columns:repeat(2,1fr)}}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
+      <circle cx="11" cy="11" r="10" stroke="#1a2540"/>
+      <path d="M11 1 A10 10 0 0 1 21 11" stroke="#22d3ee" stroke-width="2" stroke-linecap="round"/>
+      <circle cx="11" cy="11" r="2.4" fill="#22d3ee"/>
+    </svg>
+    <div><b>MIMO RL</b> <span>MISSION CONTROL</span></div>
+  </div>
+  <div class="runlights" id="runlights"></div>
+  <div class="hspace"></div>
+  <div class="live"><i class="dot"></i>UPDATED&nbsp;<span id="snap-time" style="color:var(--dim)">--</span></div>
+  <div class="clock"><b id="clock">--:--:--</b><span>LOCAL / UTC+8</span></div>
+</header>
+
+<div class="ticker">
+  <div class="tag">NOTICES</div>
+  <div style="overflow:hidden;flex:1;display:flex;align-items:center">
+    <div class="ticker-track" id="ticker"></div>
+  </div>
+</div>
+
+<main>
+  <section class="col left">
+    <div id="run-cards"></div>
+    <div class="card">
+      <div class="card-h"><h2>WATCHLIST · 关键指标</h2><span class="pill info">30MIN</span></div>
+      <div id="watchlist"></div>
+    </div>
+  </section>
+
+  <section class="col">
+    <div class="brief" id="brief">
+      <div class="brief-h" onclick="document.getElementById('brief').classList.toggle('closed')">
+        <h2>EXECUTIVE BRIEF · 任务简报</h2>
+        <span class="pill" id="brief-pill">--</span>
+        <svg class="chev" width="12" height="12" viewBox="0 0 12 12"><path d="M2 4l4 4 4-4" stroke="currentColor" fill="none" stroke-width="1.5"/></svg>
+      </div>
+      <div class="brief-b"><p id="brief-text"></p></div>
+    </div>
+
+    <div class="card">
+      <div class="card-h"><h2>BATCH COMPOSITION · 数据配比</h2><span class="pill na" id="comp-pill">--</span></div>
+      <div class="card-b">
+        <div class="comp" id="comp"></div>
+        <div class="comp-legend" id="comp-legend"></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-h"><h2>SAMPLER · 采样状态（供给）</h2><span class="pill" id="sam-pill">--</span></div>
+      <div class="card-b">
+        <div class="seg" id="sam-seg"></div>
+        <table>
+          <thead><tr><th>SOURCE</th><th class="r">ACCEPTED</th><th class="r">TARGET</th><th class="r">IN FLIGHT</th><th class="r">状态</th></tr></thead>
+          <tbody id="src-body"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-h"><h2>SOURCE TRAINING · 数据源训练明细</h2><span class="pill" id="st-pill">--</span></div>
+      <div class="card-b">
+        <div class="seg" id="st-seg"></div>
+        <div class="fil" id="st-fil"></div>
+        <table>
+          <thead><tr><th>SOURCE</th><th class="r">REWARD</th><th>REWARD 走势</th><th class="r">Δ趋势</th><th class="r">ENTROPY</th><th class="r">CTX</th><th class="r">评估</th></tr></thead>
+          <tbody id="st-body"></tbody>
+        </table>
+        <div class="src-note">▸ 点击行展开该源完整曲线 · 趋势 = 近3步均值 vs 前3步均值</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-h"><h2>ACTOR · 策略网络</h2><span class="pill" id="actor-pill">--</span></div>
+      <div class="card-b"><div class="mgrid" id="actor-grid"></div></div>
+    </div>
+
+    <div class="card">
+      <div class="card-h"><h2>CRITIC · 价值网络</h2><span class="pill" id="critic-pill">--</span></div>
+      <div class="card-b"><div class="mgrid" id="critic-grid"></div></div>
+    </div>
+
+    <div class="card">
+      <div class="card-h"><h2>ANALYSIS TIMELINE · 分析时间线</h2><span class="pill info" id="tl-pill">--</span></div>
+      <div class="card-b"><div class="tl" id="timeline"></div></div>
+    </div>
+  </section>
+
+  <section class="col right">
+    <div class="card">
+      <div class="card-h"><h2>ALERTS · 异常与规则命中</h2><span class="pill" id="al-count">0</span></div>
+      <div class="card-b" id="alerts"></div>
+    </div>
+    <div class="card">
+      <div class="card-h"><h2>ANALYSIS · 情况分析</h2><span class="pill ok">RULES</span></div>
+      <div class="card-b feed" id="feed"></div>
+    </div>
+  </section>
+</main>
+
+<script src="data.js?v=1"></script>
+<script>
+/* ================= 数据访问层 ================= */
+const D = window.DATA;
+const RUNS = ['pro','flash'];
+const RUN_LABEL = k => D.runs[k] ? D.runs[k].name : k;
+
+function metric(name){ return D.metrics.find(m=>m[0]===name); }
+/* 行格式: [tag, proVal, proDelta, flashVal, flashDelta, proSeries, flashSeries] */
+function mVal(name, run){ const m=metric(name); return m ? m[run==='pro'?1:3] : null; }
+function mDelta(name, run){ const m=metric(name); return m ? m[run==='pro'?2:4] : null; }
+function mSeries(name, run){ const m=metric(name); return m ? m[run==='pro'?5:6] : null; }
+
+function fmt(v, digits){
+  if(v===null||v===undefined) return '—';
+  if(Math.abs(v)>=1e9) return (v/1e9).toFixed(2)+'B';
+  if(Math.abs(v)>=1e6) return (v/1e6).toFixed(1)+'M';
+  if(Math.abs(v)>=1e3 && digits===undefined) return (v/1e3).toFixed(1)+'k';
+  if(digits!==undefined) return v.toFixed(digits);
+  return String(v);
+}
+function fmtDelta(d){
+  if(d===null||d===undefined) return '<span class="dl fw">—</span>';
+  const cls = d>0 ? 'up' : d<0 ? 'dn' : 'fw';
+  const sign = d>0 ? '▲+' : d<0 ? '▼' : '±';
+  return `<span class="dl ${cls}">${sign}${Math.abs(d)}</span>`;
+}
+
+/* ================= 数据源明细 ================= */
+function sget(run, src, kind){
+  const m = { rew:`critic/${src}/rewards/mean`, ent:`actor/${src}/entropy_loss`,
+              ctx:`ctx_total_length/${src}/mean`, acc:`dynsam/${src}/num_accepted/step` }[kind];
+  return (D.src_detail[run] && D.src_detail[run].sources[src] || {})[m] || null;
+}
+function trendPct(vals){
+  if(!vals || vals.length < 6) return 0;
+  const a=(vals[0]+vals[1]+vals[2])/3, b=(vals[vals.length-3]+vals[vals.length-2]+vals[vals.length-1])/3;
+  return a ? (b-a)/Math.abs(a) : 0;
+}
+function sparkSVG(vals, w=96, h=22){
+  if(!vals || vals.length < 2) return '—';
+  const min=Math.min(...vals), max=Math.max(...vals), rng=(max-min)||1;
+  const pts=vals.map((v,i)=>[(i/(vals.length-1))*(w-4)+2, h-2-((v-min)/rng)*(h-6)]);
+  const d=pts.map((p,i)=>(i?'L':'M')+p[0].toFixed(1)+','+p[1].toFixed(1)).join(' ');
+  const t=trendPct(vals);
+  const cls=t>0.02?'up':t<-0.02?'dn':'';
+  return `<svg class="spark ${cls}" width="${w}" height="${h}"><path class="area" d="${d} L${pts[pts.length-1][0].toFixed(1)},${h-1} L2,${h-1} Z"/><path class="ln" d="${d}"/><circle class="last" cx="${pts[pts.length-1][0]}" cy="${pts[pts.length-1][1]}" r="1.8"/></svg>`;
+}
+function assess(run, src){
+  const rew=sget(run,src,'rew');
+  if(!rew) return ['na','无数据'];
+  const t=trendPct(rew);
+  if(t>0.10) return ['ok','快速提升'];
+  if(t>0.02) return ['ok','稳步提升'];
+  if(t>=-0.02) return ['na','平台期'];
+  if(t>=-0.08) return ['warn','缓慢回落'];
+  return ['crit','明显退化'];
+}
+function decliningSources(run, th){
+  return Object.keys(D.src_detail[run].sources)
+    .map(s=>[s, trendPct(sget(run,s,'rew'))]).filter(x=>x[1]<=th).sort((a,b)=>a[1]-b[1]);
+}
+function risingSources(run, th){
+  return Object.keys(D.src_detail[run].sources)
+    .map(s=>[s, trendPct(sget(run,s,'rew'))]).filter(x=>x[1]>=th).sort((a,b)=>b[1]-a[1]);
+}
+function feedRow(run, name){ return (D.runs[run].feed||[]).find(f=>f[1]===name); }
+
+/* ================= 规则引擎 ================= */
+const RULES = [
+  { id:'infra-flash', sev:'crit', scope:'flash', title:'基础设施错误率超限',
+    test:()=> (mVal('dynsam/infra_error/seq_rate','flash')||0) > 1,
+    text:()=>`flash 序列级 infra 错误率 <b>${fmt(mVal('dynsam/infra_error/seq_rate','flash'))}%</b>，超过 1% 阈值。此前从 step 15 重启的根因就是某数据集的 infra 错误未被正确检测。若持续 >1%，说明检测修复未生效。` },
+  { id:'infra-pro', sev:'info', scope:'pro', title:'pro infra 错误率',
+    test:()=> (mVal('dynsam/infra_error/seq_rate','pro')||0) > 0.8,
+    text:()=>`pro 的 infra 错误率 ${fmt(mVal('dynsam/infra_error/seq_rate','pro'))}%，接近 1% 阈值，建议关注。` },
+  { id:'kl-flash', sev:'warn', scope:'flash', title:'KL 爬升',
+    test:()=> (mVal('train_infer_diff/new_infer/kl','flash')||0) > 0.004 && (mDelta('train_infer_diff/new_infer/kl','flash')||0) > 0.0005,
+    text:()=>`flash 的 train-infer KL 现值 <b>${mVal('train_infer_diff/new_infer/kl','flash')}</b>（近窗 +${mDelta('train_infer_diff/new_infer/kl','flash')}）。绝对值尚低，若斜率延续触及 0.01–0.015 警戒带，建议降学习率或提高 KL 正则权重。` },
+  { id:'kl-pro', sev:'warn', scope:'pro', title:'pro KL 上行',
+    test:()=> (mVal('train_infer_diff/new_infer/kl','pro')||0) > 0.01,
+    text:()=>`pro 的 KL 已达 <b>${mVal('train_infer_diff/new_infer/kl','pro')}</b>，进入需要密切观察的区间。` },
+  { id:'yfch', sev:'warn', scope:'both', title:'dataset-yfch 超采 / 超长上下文',
+    test:()=>{ const p=feedRow('pro','yfch'); const ctx=sget('pro','code/dataset-yfch','ctx');
+      return (p && p[2]/p[3]>3) || (ctx && ctx[ctx.length-1]>400000); },
+    text:()=>{ const p=feedRow('pro','yfch'); const ctx=sget('pro','code/dataset-yfch','ctx');
+      const ratio=p?(p[2]/p[3]).toFixed(1):'?';
+      const ctxK=ctx?Math.round(ctx[ctx.length-1]/1000)+'k':'?';
+      const rt=(trendPct(sget('pro','code/dataset-yfch','rew'))*100).toFixed(0);
+      return `code/dataset-yfch pro 侧超采 <b>${ratio}×</b>，平均上下文 <b>${ctxK} tokens</b>（全源最高）——同时消耗采样配额与算力。reward 趋势 +${rt}%，确有收益，但建议评估按 ctx 长度加成本权重。`; } },
+  { id:'cyber', sev:'warn', scope:'flash', title:'cyber 单源欠采',
+    test:()=>{ const f=feedRow('flash','9aui'); return f && f[2]/f[3]<0.6; },
+    text:()=>{ const f=feedRow('flash','9aui'); const t=(trendPct(sget('flash','cyber/dataset-9aui','rew'))*100).toFixed(0);
+      return `cyber 仅 dataset-9aui 一个源，flash 侧完成 <b>${f[2]}/${f[3]}</b>。但训练效果突出：reward 趋势 <b>${t>0?'+':''}${t}%</b>。供给瓶颈正在压制最有潜力的方向，加源或优化判分链路收益明确。`; } },
+  { id:'chat-pro', sev:'warn', scope:'pro', title:'pro 的 chat 类退化',
+    test:()=> decliningSources('pro',-0.06).filter(x=>x[0].startsWith('chat/')).length >= 2,
+    text:()=>{ const ds=decliningSources('pro',-0.06).filter(x=>x[0].startsWith('chat/'));
+      const fe=(trendPct(sget('flash','chat/dataset-eup7','rew'))*100).toFixed(0);
+      return `pro 的 chat 源 reward 下行：${ds.map(x=>`${x[0].split('/')[1]} <b>${(x[1]*100).toFixed(0)}%</b>`).join('、')}。chat 仅占 batch 约 3%，长期退化会形成通用对话短板；flash 侧同源 eup7 ${fe>0?'+':''}${fe}%，对比看更像 pro 侧配比/学习率问题。`; } },
+  { id:'code-mixed', sev:'info', scope:'both', title:'code 类内部分化',
+    test:()=> decliningSources('pro',-0.02).filter(x=>x[0].startsWith('code/')).length >= 3,
+    text:()=>{ const dp=decliningSources('pro',-0.02).filter(x=>x[0].startsWith('code/'));
+      const df=decliningSources('flash',-0.02).filter(x=>x[0].startsWith('code/'));
+      const top=risingSources('flash',0.15).filter(x=>x[0].startsWith('code/'));
+      return `code 类占 batch 约 68%，内部已分化：pro 侧 ${dp.length} 个源回落（${dp.slice(0,4).map(x=>x[0].split('/')[1]).join('、')}…），flash 侧 ${df.length} 个；头部源（${top.slice(0,2).map(x=>x[0].split('/')[1]).join('、')||'—'}）涨幅 >15%。建议对持续回落源做数据质量复查。`; } },
+  { id:'pro-healthy', sev:'ok', scope:'pro', title:'pro 训练相位',
+    test:()=> (mDelta('actor/pg_loss','pro')||0) < 0,
+    text:()=>{ const up=risingSources('pro',0.12);
+      return `pro pg_loss 下行、处于收敛相位；pass@1 ${fmt(mVal('dynsam/passrate/one','pro'),3)}（${fmtDelta(mDelta('dynsam/passrate/one','pro'))}）。提升最快源：${up.slice(0,3).map(x=>`${x[0].split('/')[1]} +${(x[1]*100).toFixed(0)}%`).join('、')||'—'}。`; } },
+  { id:'flash-phase', sev:'info', scope:'flash', title:'flash 训练相位',
+    test:()=> (mDelta('actor/entropy_loss','flash')||0) < 0,
+    text:()=>{ const up=risingSources('flash',0.10);
+      return `flash 熵下行、策略定型中。改善面：${up.length} 个源 trend >+10%（${up.slice(0,3).map(x=>`${x[0].split('/')[1]} +${(x[1]*100).toFixed(0)}%`).join('、')}…）。`; } },
+];
+
+/* ================= 渲染 ================= */
+const $ = id => document.getElementById(id);
+function tickClock(){ $('clock').textContent = new Date().toTimeString().slice(0,8); }
+tickClock(); setInterval(tickClock, 1000);
+$('snap-time').textContent = D.generated_at + ' (UTC+8)';
+
+/* header run lights */
+(function(){
+  $('runlights').innerHTML = RUNS.map(k=>{
+    const r=D.runs[k]; if(!r) return '';
+    return `<div class="runlight"><i class="dot ${k==='flash'?'amber':''}"></i><b>${r.name.replace('mimo-','')}</b><span>STEP ${r.step}</span></div>`;
+  }).join('');
+})();
+
+/* ticker */
+(function(){
+  const items = (D.notices||[]).map(n=>`<span><b>[${n.ago}]</b> ${n.text}</span>`).join('') || '<span>no notices</span>';
+  $('ticker').innerHTML = items + items;
+})();
+
+/* run cards + benchmark */
+function benchHist(run){
+  const b=(D.benchmarks||[])[0]; if(!b||!b.history||!b.history[run]) return {latest:'—', spark:'', note:''};
+  const h=b.history[run];
+  const latest=h.vals[h.vals.length-1];
+  return {latest, spark:sparkSVG(h.vals,72,20), note:b.title};
+}
+(function(){
+  $('run-cards').innerHTML = RUNS.map(k=>{
+    const r=D.runs[k]; if(!r) return '';
+    const b=benchHist(k);
+    const dynsamD = r.dynsam_d!=null ? `<span class="up" style="font-size:9px">+${r.dynsam_d} vs step 1</span>` : '';
+    return `<div class="run-card ${k==='flash'?'warn-edge':''}">
+      <div class="rc-h"><b>${r.name}</b><span class="pill ${r.phase==='training'?'ok':'info'}">${(r.phase||'').toUpperCase()} ${r.progress||0}%</span>
+        <div class="step"><b>S${r.step}</b><span>${r.elapsed}</span></div></div>
+      <div class="kv">
+        <div><label>DYNSAM/AVG@N</label><b>${r.dynsam??'—'}</b> ${dynsamD}</div>
+        <div><label>COST SO FAR</label><b style="color:var(--amber)">${r.cost}</b></div>
+        <div><label>TOKENS · STEP</label><b>${r.tok_step??'—'}</b></div>
+        <div><label>TOKENS · TOTAL</label><b>${r.tok_total??'—'}</b></div>
+        <div><label>SAMPLES TRAINED</label><b>${r.samples}</b></div>
+        <div><label>BATCH</label><b style="font-size:11px">${r.batch}</b></div>
+      </div>
+      <div class="bench"><div class="bl"><span>${b.note.toUpperCase()}</span><b>${b.latest}</b></div>${b.spark}</div>
+    </div>`;
+  }).join('<div style="height:12px"></div>');
+})();
+
+/* watchlist */
+const WATCH=['train_infer_diff/new_infer/kl','dynsam/infra_error/seq_rate','critic/rewards/mean','dynsam/avg@n','timing_s/step'];
+(function(){
+  $('watchlist').innerHTML = WATCH.map(n=>`<div class="wl-row"><span class="nm">${n}</span>
+    <span class="vl">P ${fmt(mVal(n,'pro'))}</span>${fmtDelta(mDelta(n,'pro'))}
+    <span class="vl">F ${fmt(mVal(n,'flash'))}</span>${fmtDelta(mDelta(n,'flash'))}</div>`).join('');
+})();
+
+/* brief */
+(function(){
+  const hitsPreview = RULES.filter(r=>r.test());
+  const nCrit = hitsPreview.filter(r=>r.sev==='crit'||r.sev==='warn').length;
+  $('brief-pill').className = 'pill ' + (nCrit>2?'warn':'ok');
+  $('brief-pill').textContent = nCrit ? `${nCrit} 项需关注` : '全部正常';
+  const klF=mVal('train_infer_diff/new_infer/kl','flash'), klP=mVal('train_infer_diff/new_infer/kl','pro');
+  const pr1=mVal('dynsam/passrate/one','pro'), pr1d=mDelta('dynsam/passrate/one','pro');
+  const upF=risingSources('flash',0.10);
+  $('brief-text').innerHTML =
+    `数据更新于 <b>${D.generated_at}</b>。两条 run 均在推进：pro 位于 step <b>${D.runs.pro.step}</b>，flash 位于 step <b>${D.runs.flash.step}</b>。`
+    + `当前规则引擎命中 <b>${hitsPreview.length}</b> 条（详见右侧 ALERTS）。关键读数：flash KL <b>${fmt(klF)}</b>、pro KL <b>${fmt(klP)}</b>；pro pass@1 <b>${fmt(pr1,3)}</b>（${mDelta('dynsam/passrate/one','pro')>0?'+':''}${fmt(mDelta('dynsam/passrate/one','pro'),3)}）；`
+    + `flash 侧 ${upF.length} 个数据源 reward 趋势 >+10%。采样与逐源明细见下方各面板，历史分析结论见时间线。`;
+})();
+
+/* composition */
+(function(){
+  if(!D.comp || !D.comp.length){ $('comp').innerHTML='<div style="flex:1;background:var(--line)"></div>'; return; }
+  $('comp').innerHTML = D.comp.map(c=>`<div style="flex-grow:${c[1]};flex-basis:0;background:${c[2]}">${c[1]}%</div>`).join('');
+  $('comp-legend').innerHTML = D.comp.map(c=>`<span><i style="background:${c[2]}"></i>${c[0]} ${c[1]}%</span>`).join('');
+  $('comp-pill').textContent = 'STEP ' + (D.runs.pro.step-1);
+})();
+
+/* sampler */
+let curRun='pro';
+function mkSeg(el, on){
+  el.innerHTML = RUNS.map((k,i)=>`<button class="${i===0?'on':''}" data-run="${k}">${RUN_LABEL(k).toUpperCase()}</button>`).join('');
+  el.querySelectorAll('button').forEach(b=>b.onclick=()=>{
+    el.querySelectorAll('button').forEach(x=>x.classList.remove('on'));
+    b.classList.add('on'); on(b.dataset.run);
+  });
+}
+mkSeg($('sam-seg'), k=>{ curRun=k; renderSources(); });
+function renderSources(){
+  const feed=D.runs[curRun].feed||[];
+  $('src-body').innerHTML = feed.map(f=>{
+    const [cat,name,acc,tgt,inflight]=f;
+    const ratio=acc/tgt;
+    let st='<span class="fw">正常</span>', cls='';
+    if(ratio>2){ st=`<span class="ov">▲ 超采 ${ratio.toFixed(1)}×</span>`; cls='ov'; }
+    else if(ratio<0.7){ st=`<span class="starve">▼ 欠采 ${(ratio*100).toFixed(0)}%</span>`; }
+    return `<tr><td><span class="cat-${cat}">●</span> ${cat}/${name}</td>
+      <td class="r ${cls}">${acc}</td><td class="r">${tgt}</td>
+      <td class="r ${inflight>300?'ov':''}">${inflight}</td><td class="r">${st}</td></tr>`;
+  }).join('');
+  const starved=feed.filter(f=>f[2]/f[3]<0.7).length;
+  $('sam-pill').className='pill '+(starved?'warn':'ok');
+  $('sam-pill').textContent=starved?`${starved} SOURCE STARVED`:'ALL FED';
+}
+renderSources();
+
+/* source training detail */
+let stRun='pro', stCat='all', openRow=null;
+mkSeg($('st-seg'), k=>{ stRun=k; openRow=null; renderST(); });
+(function(){
+  const cats=['all','code','general','cyber','visual','chat'];
+  $('st-fil').innerHTML=cats.map((c,i)=>`<button class="${i===0?'on':''}">${c.toUpperCase()}</button>`).join('');
+  $('st-fil').querySelectorAll('button').forEach(b=>b.onclick=()=>{
+    $('st-fil').querySelectorAll('button').forEach(x=>x.classList.remove('on'));
+    b.classList.add('on'); stCat=b.textContent.toLowerCase(); openRow=null; renderST();
+  });
+})();
+function cellHTML(label, vals, f){
+  if(!vals) return `<div class="dcell"><label>${label}</label><b>—</b></div>`;
+  const t=trendPct(vals);
+  return `<div class="dcell"><label>${label} · ${t>=0?'+':''}${(t*100).toFixed(1)}%</label><b>${f(vals[vals.length-1])}</b>${sparkSVG(vals,120,26)}</div>`;
+}
+function renderST(){
+  const srcs=Object.keys(D.src_detail[stRun].sources||{})
+    .filter(s=>stCat==='all'||s.startsWith(stCat+'/'))
+    .sort((a,b)=>trendPct(sget(stRun,b,'rew'))-trendPct(sget(stRun,a,'rew')));
+  let html='';
+  srcs.forEach(src=>{
+    const rew=sget(stRun,src,'rew'), ent=sget(stRun,src,'ent'), ctx=sget(stRun,src,'ctx');
+    const t=trendPct(rew); const [cls,label]=assess(stRun,src);
+    const pc=t>0.02?'up':t<-0.02?'dn':'fw';
+    html+=`<tr class="src-row ${openRow===src?'open':''}" data-src="${src}">
+      <td><span class="cat-${src.split('/')[0]}">●</span> ${src}</td>
+      <td class="r"><b>${rew?rew[rew.length-1].toFixed(3):'—'}</b></td>
+      <td>${sparkSVG(rew)}</td>
+      <td class="r ${pc}">${rew?(t>=0?'+':'')+(t*100).toFixed(1)+'%':'—'}</td>
+      <td class="r">${ent?ent[ent.length-1].toFixed(3):'—'}</td>
+      <td class="r">${ctx?Math.round(ctx[ctx.length-1]/1000)+'k':'—'}</td>
+      <td class="r"><span class="pill ${cls}">${label}</span></td></tr>`;
+    if(openRow===src){
+      html+=`<tr class="detail-row"><td colspan="7"><div class="detail-wrap"><div class="detail-grid">
+        ${cellHTML('CRITIC REWARDS',rew,v=>v.toFixed(3))}
+        ${cellHTML('ACTOR ENTROPY',ent,v=>v.toFixed(3))}
+        ${cellHTML('CTX LENGTH',ctx,v=>Math.round(v/1000)+'k')}
+        ${cellHTML('ACCEPTED / STEP',sget(stRun,src,'acc'),v=>Math.round(v))}
+      </div></div></td></tr>`;
+    }
+  });
+  $('st-body').innerHTML=html;
+  $('st-body').querySelectorAll('tr.src-row').forEach(tr=>tr.onclick=()=>{
+    openRow = openRow===tr.dataset.src ? null : tr.dataset.src; renderST();
+  });
+  const nOk=srcs.filter(s=>assess(stRun,s)[0]==='ok').length;
+  const nCrit=srcs.filter(s=>assess(stRun,s)[0]==='crit').length;
+  $('st-pill').className='pill '+(nCrit?'warn':'ok');
+  $('st-pill').textContent=`${srcs.length} SRC · ${nOk} 提升 · ${nCrit} 退化`;
+}
+renderST();
+
+/* actor & critic grids with real series */
+function renderGrid(id, names){
+  $(id).innerHTML = names.map(n=>`<div class="mcell"><div class="t">${n}</div>
+    <div class="v"><b>${fmt(mVal(n,'pro'))}</b>${fmtDelta(mDelta(n,'pro'))}<span style="color:var(--faint)">|</span><b>${fmt(mVal(n,'flash'))}</b>${fmtDelta(mDelta(n,'flash'))}</div>
+    <div style="display:flex;gap:14px;margin-top:8px">${sparkSVG(mSeries(n,'pro'),64,18)}${sparkSVG(mSeries(n,'flash'),64,18)}</div>
+  </div>`).join('');
+}
+renderGrid('actor-grid', ['actor/entropy_loss','actor/pg_loss','actor/grad_norm','train_infer_diff/new_infer/kl','ctx_total_length/mean','dynsam/agg_turn/mean']);
+renderGrid('critic-grid', ['critic/rewards/mean','dynsam/avg@n','dynsam/passrate/zero','dynsam/passrate/one']);
+$('actor-pill').className='pill ok'; $('actor-pill').textContent='LIVE';
+$('critic-pill').className='pill ok'; $('critic-pill').textContent='LIVE';
+
+/* timeline */
+(function(){
+  const tl=D.timeline||[];
+  $('timeline').innerHTML=tl.map(e=>`<div class="tl-item ${/退化|风险|重启/.test(e.title)?'warn':''}">
+    <span class="tl-t">${e.time}</span><b>${e.title}</b>
+    <ul>${e.points.map(p=>`<li>${p}</li>`).join('')}</ul></div>`).join('');
+  $('tl-pill').textContent=tl.length+' ENTRIES';
+})();
+
+/* alerts & feed */
+(function(){
+  const sevRank={crit:0,warn:1,info:2,ok:3};
+  const hits=RULES.filter(r=>r.test()).sort((a,b)=>sevRank[a.sev]-sevRank[b.sev]);
+  $('al-count').className='pill '+(hits[0]?hits[0].sev:'ok');
+  $('al-count').textContent=hits.length+' RULES';
+  $('alerts').innerHTML=hits.map((r,i)=>`<div class="alert ${r.sev}">
+    <div class="a-t"><b>${r.title}</b><span class="pill ${r.sev}">${r.sev.toUpperCase()}</span><time>#${i+1}</time></div>
+    <p>${r.text()}</p></div>`).join('') || '<div class="alert ok"><p>所有规则通过，无异常。</p></div>';
+  const sevTag={crit:'CRITICAL',warn:'WATCH',info:'NOTE',ok:'POSITIVE'};
+  $('feed').innerHTML=hits.map(r=>`<div class="msg ${r.sev==='ok'?'ok':r.sev==='crit'?'warn':''}">
+    <span class="tag">${sevTag[r.sev]} · ${r.scope.toUpperCase()}</span><p>${r.text()}</p></div>`).join('');
+})();
+</script>
+</body>
+</html>
