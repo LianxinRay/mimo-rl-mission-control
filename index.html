@@ -497,7 +497,7 @@ function benchHist(run){
     const b=benchHist(k);
     const dynsamD = r.dynsam_d!=null ? `<span class="up" style="font-size:9px">+${r.dynsam_d} vs step 1</span>` : '';
     return `<div class="run-card ${k==='flash'?'warn-edge':''}">
-      <div class="rc-h"><b>${r.name}</b><span class="pill ${r.phase==='training'?'ok':'info'}">${(r.phase||'').toUpperCase()} ${r.progress||0}%</span>
+      <div class="rc-h"><b>${r.name}</b><span class="pill ${r.status==='ended'?'info':(r.phase==='training'?'ok':'info')}">${r.status==='ended'?'ENDED':((r.phase||'').toUpperCase()+' '+(r.progress||0)+'%')}</span>
         <div class="step"><b>S${r.step}</b><span>${r.elapsed}</span></div></div>
       <div class="kv">
         <div><label>DYNSAM/AVG@N</label><b>${r.dynsam??'—'}</b> ${dynsamD}</div>

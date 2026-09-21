@@ -39,6 +39,9 @@ TIMELINE = [
                 "yfch 双重代价：超采 5.8× 且 ctx 514k 全源最高", "code 类内部分化：m1dt 双 run +17~20% vs 尾部源回落"]},
     {"time": "2026-09-17 17:03", "title": "自动化分享看板上线",
      "points": ["30 分钟自动刷新，群链接即可预览", "规则引擎自动输出分析，时间线持续累积"]},
+    {"time": "2026-09-21 09:40", "title": "双 run 已结束 + 采集器修复",
+     "points": ["pro / flash 两个 run 均已结束（mode=ended），step 停在 S30 左右，接口 progress/phase 字段转为 null",
+                "修复采集器 null 兼容问题并补充 run 结束状态展示，监控转入待命：新 run 启动后自动恢复跟踪"]},
 ]
 
 
@@ -47,8 +50,21 @@ def get(path, **params):
     if params:
         url += "?" + urllib.parse.urlencode(params)
     req = urllib.request.Request(url, headers={"User-Agent": "mimo-rl-mc/1.0"})
-    with urllib.request.urlopen(req, timeout=60) as r:
-        return json.load(r)
+    last = None
+    for attempt in range(3):
+        try:
+            with urllib.request.urlopen(req, timeout=60) as r:
+                return json.load(r)
+        except Exception as e:
+            last = e
+            print(f"get {path} attempt {attempt + 1} fail: {e}", file=sys.stderr)
+            time.sleep(3 * (attempt + 1))
+    raise last
+
+
+def num(v, default=0.0):
+    """None 或非法值兜底：接口字段可能返回 null（如 run 结束后 progress 为空）"""
+    return v if isinstance(v, (int, float)) and not isinstance(v, bool) else default
 
 
 def series(run, tags, version=None):
@@ -147,18 +163,19 @@ def main():
         data["runs"][run] = {
             "name": st.get("run", {}).get("label", f"mimo-v2.6-{run}"),
             "step": latest_feed.get("step") or step_info.get("last"),
-            "phase": step_info.get("phase", ""),
-            "progress": round(step_info.get("progress", 0) * 100),
-            "gen_frac": round(step_info.get("gen_frac", 0) * 100),
+            "phase": step_info.get("phase") or "",
+            "status": st.get("run", {}).get("mode", ""),
+            "progress": round(num(step_info.get("progress")) * 100),
+            "gen_frac": round(num(step_info.get("gen_frac")) * 100),
             "elapsed": elapsed,
             "restarted_ago": step_info.get("since"),
             "dynsam": rnd(dynsam[-1], 3) if dynsam else None,
             "dynsam_d": rnd(dynsam[-1] - dynsam[0], 3) if len(dynsam) > 1 else None,
-            "cost": f"${st.get('cost', {}).get('so_far', 0):,.0f}",
+            "cost": f"${num(st.get('cost', {}).get('so_far')):,.0f}",
             "tok_step": fmt_num(totals.get("tokens_step")),
             "tok_total": fmt_num(totals.get("tokens_cum")),
-            "samples": f"{int(totals.get('trained_cum', 0)/1000)}k",
-            "batch": f"{int(totals.get('prompts_per_step', 1568)):,} prompts",
+            "samples": f"{int(num(totals.get('trained_cum'))/1000)}k",
+            "batch": f"{int(num(totals.get('prompts_per_step'), 1568)):,} prompts",
         }
 
         # 采样 feed（live latest 的每源 [accepted, target, in_flight, x]）
